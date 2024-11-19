@@ -15,14 +15,10 @@
 #   None - The operation modifies the value at the pointer address
 # =================================================================
 abs:
-    # Prologue
-    ebreak
-    # Load number from memory
-    lw t0 0(a0)
-    bge t0, zero, done
-
-    # TODO: Add your own implementation
-
+    # No prologue needed as no s-registers used
+    lw t0, 0(a0)       # Load value from memory
+    bgez t0, done      # If value >= 0, done
+    neg t0, t0         # Otherwise negate value
+    sw t0, 0(a0)       # Store back to memory
 done:
-    # Epilogue
-    jr ra
+    jr ra                # Return

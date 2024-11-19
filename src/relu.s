@@ -23,13 +23,33 @@
 #   Result: [ 0, 0, 3,  0, 5]
 # ==============================================================================
 relu:
+    # Input validation
     li t0, 1             
-    blt a1, t0, error     
-    li t1, 0             
-
+    blt a1, t0, error    # if length < 1, error
+    
+    # Initialize counter
+    li t1, 0             # t1 = i = 0
+    
 loop_start:
-    # TODO: Add your own implementation
+    bge t1, a1, loop_end # if i >= length, exit loop
+    
+    # Get current element
+    slli t2, t1, 2       # t2 = i * 4 (offset)
+    add t3, a0, t2       # t3 = array + offset
+    lw t4, 0(t3)        # t4 = array[i]
+    
+    # Check if negative
+    bge t4, zero, loop_continue # if array[i] >= 0, skip
+    sw zero, 0(t3)      # array[i] = 0
+    
+loop_continue:
+    addi t1, t1, 1      # i++
+    j loop_start
+    
+loop_end:
+    jr ra                # return
 
 error:
     li a0, 36          
-    j exit          
+    j exit
+    

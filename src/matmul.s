@@ -34,89 +34,93 @@
 #   None explicit - Result matrix D populated in-place
 # =======================================================
 matmul:
-    # Error checks
-    li t0 1
-    blt a1, t0, error
-    blt a2, t0, error
-    blt a4, t0, error
-    blt a5, t0, error
-    bne a2, a4, error
+   # Validate input dimensions
+   li t0, 1
+   blt a1, t0, invalid_dim   # rows of M0 must be >= 1
+   blt a2, t0, invalid_dim   # cols of M0 must be >= 1
+   blt a4, t0, invalid_dim   # rows of M1 must be >= 1
+   blt a5, t0, invalid_dim   # cols of M1 must be >= 1
+   bne a2, a4, invalid_dim   # M0 cols must equal M1 rows
 
-    # Prologue
-    addi sp, sp, -28
-    sw ra, 0(sp)
-    
-    sw s0, 4(sp)
-    sw s1, 8(sp)
-    sw s2, 12(sp)
-    sw s3, 16(sp)
-    sw s4, 20(sp)
-    sw s5, 24(sp)
-    
-    li s0, 0 # outer loop counter
-    li s1, 0 # inner loop counter
-    mv s2, a6 # incrementing result matrix pointer
-    mv s3, a0 # incrementing matrix A pointer, increments durring outer loop
-    mv s4, a3 # incrementing matrix B pointer, increments during inner loop 
-    
-outer_loop_start:
-    #s0 is going to be the loop counter for the rows in A
-    li s1, 0
-    mv s4, a3
-    blt s0, a1, inner_loop_start
+   # Save registers and set up stack frame
+   addi sp, sp, -28
+   sw ra, 0(sp)
+   sw s0, 4(sp)
+   sw s1, 8(sp)
+   sw s2, 12(sp)
+   sw s3, 16(sp)
+   sw s4, 20(sp)
+   sw s5, 24(sp)
 
-    j outer_loop_end
-    
-inner_loop_start:
-# HELPER FUNCTION: Dot product of 2 int arrays
-# Arguments:
-#   a0 (int*) is the pointer to the start of arr0
-#   a1 (int*) is the pointer to the start of arr1
-#   a2 (int)  is the number of elements to use = number of columns of A, or number of rows of B
-#   a3 (int)  is the stride of arr0 = for A, stride = 1
-#   a4 (int)  is the stride of arr1 = for B, stride = len(rows) - 1
-# Returns:
-#   a0 (int)  is the dot product of arr0 and arr1
-    beq s1, a5, inner_loop_end
+   # Initialize variables
+   li s0, 0                  # Row counter for M0
+   mv s2, a6                 # Result matrix address
+   mv s3, a0                 # Base address of M0
 
-    addi sp, sp, -24
-    sw a0, 0(sp)
-    sw a1, 4(sp)
-    sw a2, 8(sp)
-    sw a3, 12(sp)
-    sw a4, 16(sp)
-    sw a5, 20(sp)
-    
-    mv a0, s3 # setting pointer for matrix A into the correct argument value
-    mv a1, s4 # setting pointer for Matrix B into the correct argument value
-    mv a2, a2 # setting the number of elements to use to the columns of A
-    li a3, 1 # stride for matrix A
-    mv a4, a5 # stride for matrix B
-    
-    jal dot
-    
-    mv t0, a0 # storing result of the dot product into t0
-    
-    lw a0, 0(sp)
-    lw a1, 4(sp)
-    lw a2, 8(sp)
-    lw a3, 12(sp)
-    lw a4, 16(sp)
-    lw a5, 20(sp)
-    addi sp, sp, 24
-    
-    sw t0, 0(s2)
-    addi s2, s2, 4 # Incrememtning pointer for result matrix
-    
-    li t1, 4
-    add s4, s4, t1 # incrememtning the column on Matrix B
-    
-    addi s1, s1, 1
-    j inner_loop_start
-    
-inner_loop_end:
-    # TODO: Add your own implementation
+matrix_row_loop:
+   bge s0, a1, matrix_done   # Exit if row counter >= M0 rows
+   li s1, 0                  # Column counter for M1
+   mv s4, a3                 # Reset M1 column base address
 
-error:
-    li a0, 38
-    j exit
+matrix_col_loop:
+   bge s1, a5, next_row      # Exit if column counter >= M1 cols
+
+   # Save arguments before calling dot product
+   addi sp, sp, -24
+   sw a0, 0(sp)
+   sw a1, 4(sp)
+   sw a2, 8(sp)
+   sw a3, 12(sp)
+   sw a4, 16(sp)
+   sw a5, 20(sp)
+
+   # Set up arguments for dot product
+   mv a0, s3                 # Row of M0
+   mv a1, s4                 # Column of M1
+   mv a2, a2                 # Number of elements (M0 cols = M1 rows)
+   li a3, 1                  # Stride for M0
+   mv a4, a5                 # Stride for M1 (M1 cols)
+
+   # Call dot product
+   jal ra, dot
+
+   # Store the result
+   sw a0, 0(s2)              # Store the dot product in the result matrix
+
+   # Restore saved arguments
+   lw a5, 20(sp)
+   lw a4, 16(sp)
+   lw a3, 12(sp)
+   lw a2, 8(sp)
+   lw a1, 4(sp)
+   lw a0, 0(sp)
+   addi sp, sp, 24
+
+   # Move to the next column
+   addi s2, s2, 4            # Increment result matrix pointer
+   addi s4, s4, 4            # Increment M1 column pointer
+   addi s1, s1, 1            # Increment column counter
+   j matrix_col_loop          # Repeat for next column
+
+next_row:
+   # Move to the next row in M0
+   slli t0, a2, 2            # Calculate row offset (M0 cols * 4 bytes)
+   add s3, s3, t0            # Increment M0 pointer to the next row
+   addi s0, s0, 1            # Increment row counter
+   j matrix_row_loop          # Repeat for next row
+
+matrix_done:
+   # Restore registers and stack frame
+   lw ra, 0(sp)
+   lw s0, 4(sp)
+   lw s1, 8(sp)
+   lw s2, 12(sp)
+   lw s3, 16(sp)
+   lw s4, 20(sp)
+   lw s5, 24(sp)
+   addi sp, sp, 28
+   jr ra
+
+invalid_dim:
+   li a0, 38                 # Error code for invalid dimensions
+   j exit                    # Exit the program

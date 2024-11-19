@@ -24,92 +24,88 @@
 #   - Terminates with error code 30 on `fwrite` error or EOF.
 # ==============================================================================
 write_matrix:
-    # Prologue
-    addi sp, sp, -44
-    sw ra, 0(sp)
-    sw s0, 4(sp)
-    sw s1, 8(sp)
-    sw s2, 12(sp)
-    sw s3, 16(sp)
-    sw s4, 20(sp)
+   # Prologue: Save registers to the stack
+   addi sp, sp, -44
+   sw ra, 0(sp)
+   sw s0, 4(sp)
+   sw s1, 8(sp)
+   sw s2, 12(sp)
+   sw s3, 16(sp)
+   sw s4, 20(sp)
+   
+   # Store function arguments
+   mv s1, a1          # Pointer to matrix
+   mv s2, a2          # Number of rows
+   mv s3, a3          # Number of columns
 
-    # save arguments
-    mv s1, a1        # s1 = matrix pointer
-    mv s2, a2        # s2 = number of rows
-    mv s3, a3        # s3 = number of columns
+   # Open file in write mode
+   li a1, 1           # Mode: write
+   jal fopen
+   li t0, -1
+   beq a0, t0, fopen_fail
+   mv s0, a0          # Save file descriptor
 
-    li a1, 1
+   # Write the matrix dimensions to the file
+   sw s2, 24(sp)      # Store rows in stack
+   sw s3, 28(sp)      # Store columns in stack
+   mv a0, s0          # File descriptor
+   addi a1, sp, 24    # Buffer pointer to rows and columns
+   li a2, 2           # Write two integers
+   li a3, 4           # Size of each integer
+   jal fwrite
+   li t0, 2
+   bne a0, t0, fwrite_fail
 
-    jal fopen
+   # Calculate total number of elements (rows * columns)
+   mv s4, zero        # Result accumulator for multiplication
+   mv t0, zero        # Loop counter
+matrix_element_count:
+   beq t0, s3, count_done
+   add s4, s4, s2     # Accumulate rows
+   addi t0, t0, 1
+   j matrix_element_count
+count_done:
 
-    li t0, -1
-    beq a0, t0, fopen_error   # fopen didn't work
+   # Write the matrix data to the file
+   mv a0, s0          # File descriptor
+   mv a1, s1          # Pointer to matrix data
+   mv a2, s4          # Number of elements
+   li a3, 4           # Size of each element
+   jal fwrite
+   bne a0, s4, fwrite_fail
 
-    mv s0, a0        # file descriptor
+   # Close the file
+   mv a0, s0          # File descriptor
+   jal fclose
+   li t0, -1
+   beq a0, t0, fclose_fail
 
-    # Write number of rows and columns to file
-    sw s2, 24(sp)    # number of rows
-    sw s3, 28(sp)    # number of columns
+   # Epilogue: Restore registers and return
+   lw ra, 0(sp)
+   lw s0, 4(sp)
+   lw s1, 8(sp)
+   lw s2, 12(sp)
+   lw s3, 16(sp)
+   lw s4, 20(sp)
+   addi sp, sp, 44
+   jr ra
 
-    mv a0, s0
-    addi a1, sp, 24  # buffer with rows and columns
-    li a2, 2         # number of elements to write
-    li a3, 4         # size of each element
-
-    jal fwrite
-
-    li t0, 2
-    bne a0, t0, fwrite_error
-
-    # mul s4, s2, s3   # s4 = total elements
-    # FIXME: Replace 'mul' with your own implementation
-
-    # write matrix data to file
-    mv a0, s0
-    mv a1, s1        # matrix data pointer
-    mv a2, s4        # number of elements to write
-    li a3, 4         # size of each element
-
-    jal fwrite
-
-    bne a0, s4, fwrite_error
-
-    mv a0, s0
-
-    jal fclose
-
-    li t0, -1
-    beq a0, t0, fclose_error
-
-    # Epilogue
-    lw ra, 0(sp)
-    lw s0, 4(sp)
-    lw s1, 8(sp)
-    lw s2, 12(sp)
-    lw s3, 16(sp)
-    lw s4, 20(sp)
-    addi sp, sp, 44
-
-    jr ra
-
-fopen_error:
-    li a0, 27
-    j error_exit
-
-fwrite_error:
-    li a0, 30
-    j error_exit
-
-fclose_error:
-    li a0, 28
-    j error_exit
-
-error_exit:
-    lw ra, 0(sp)
-    lw s0, 4(sp)
-    lw s1, 8(sp)
-    lw s2, 12(sp)
-    lw s3, 16(sp)
-    lw s4, 20(sp)
-    addi sp, sp, 44
-    j exit
+# Error handlers
+fopen_fail:
+   li a0, 27
+   j exit_with_error
+fwrite_fail:
+   li a0, 30
+   j exit_with_error
+fclose_fail:
+   li a0, 28
+   j exit_with_error
+exit_with_error:
+   lw ra, 0(sp)
+   lw s0, 4(sp)
+   lw s1, 8(sp)
+   lw s2, 12(sp)
+   lw s3, 16(sp)
+   lw s4, 20(sp)
+   addi sp, sp, 44
+   j exit
